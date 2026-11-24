@@ -2,7 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { GraphMessage } from "../types";
 import { readSse } from "./api";
 import { FIXTURE_MESSAGES, FIXTURE_SENT } from "./fixtures";
-import { fetchPaged, graphFetch, groupThreads } from "./graph";
+import {
+  fetchPaged,
+  followUpThreads,
+  graphFetch,
+  groupThreads,
+  IGNORED_CATEGORY,
+  isNoise,
+} from "./graph";
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers });
@@ -99,6 +106,79 @@ describe("groupThreads", () => {
     expect(body.length).toBe(300);
     expect(body.startsWith("…")).toBe(true);
     expect(body).not.toContain("m5x");
+  });
+});
+
+describe("noise, ignore and follow-ups", () => {
+  const base = FIXTURE_MESSAGES[0];
+  const m = (subject: string, extra: Partial<GraphMessage> = {}): GraphMessage => ({
+    ...base,
+    subject,
+    ...extra,
+  });
+  it("isNoise drops OTPs, auto-replies and calendar items but keeps real mail", () => {
+    expect(isNoise(m("Your one-time password", { bodyPreview: "Use 482913 to sign in." }))).toBe(
+      true
+    );
+    expect(isNoise(m("Your one-time password"))).toBe(false); // no code: left to the AI
+    expect(isNoise(m("Sign in", { bodyPreview: "Your verification code is 123456" }))).toBe(true);
+    expect(isNoise(m("Automatic reply: Q4 plan"))).toBe(true);
+    expect(isNoise(m("Undeliverable: hello"))).toBe(true);
+    expect(isNoise(m("Team sync", { "@odata.type": "#microsoft.graph.eventMessageRequest" }))).toBe(
+      true
+    );
+    expect(isNoise(m("Re: OTP feature design"))).toBe(false);
+    expect(
+      isNoise(
+        m("Need the verification code process documented", { bodyPreview: "Can you write it up?" })
+      )
+    ).toBe(false);
+    expect(isNoise(base)).toBe(false);
+  });
+  it("the OTP fixture never reaches the digest", () => {
+    expect(
+      groupThreads(FIXTURE_MESSAGES, "me@contoso.com").some((t) => t.conversationId === "c8")
+    ).toBe(false);
+  });
+  it("an ignored message hides its whole conversation from inbox and follow-ups", () => {
+    const tagged = FIXTURE_MESSAGES.map((x) =>
+      x.id === "m5" ? { ...x, categories: [IGNORED_CATEGORY] } : x
+    );
+    expect(groupThreads(tagged, "me@contoso.com").some((t) => t.conversationId === "c1")).toBe(
+      false
+    );
+    const sent = FIXTURE_SENT.map((x) => ({ ...x, categories: [IGNORED_CATEGORY] }));
+    expect(followUpThreads(sent, FIXTURE_MESSAGES, "me@contoso.com")).toEqual([]);
+  });
+  it("follow-ups are sent mails with no answer since, addressed to someone else", () => {
+    const out = followUpThreads(FIXTURE_SENT, FIXTURE_MESSAGES, "me@contoso.com");
+    expect(out.map((t) => [t.conversationId, t.kind])).toEqual([
+      ["c7", "sent"],
+      ["c6", "sent"],
+    ]);
+    const answered = [
+      ...FIXTURE_MESSAGES,
+      { ...base, id: "a", conversationId: "c7", receivedDateTime: new Date().toISOString() },
+    ];
+    expect(
+      followUpThreads(FIXTURE_SENT, answered, "me@contoso.com").some(
+        (t) => t.conversationId === "c7"
+      )
+    ).toBe(false);
+    const toSelf = FIXTURE_SENT.map((x) => ({
+      ...x,
+      toRecipients: [{ emailAddress: { name: "", address: "ME@contoso.com" } }],
+    }));
+    expect(followUpThreads(toSelf, FIXTURE_MESSAGES, "me@contoso.com")).toEqual([]);
+  });
+  it("a conversation is either an inbox thread or a follow-up, never both", () => {
+    const inbox = groupThreads(FIXTURE_MESSAGES, "me@contoso.com", FIXTURE_SENT).map(
+      (t) => t.conversationId
+    );
+    const sent = followUpThreads(FIXTURE_SENT, FIXTURE_MESSAGES, "me@contoso.com").map(
+      (t) => t.conversationId
+    );
+    expect(inbox.filter((c) => sent.includes(c))).toEqual([]);
   });
 });
 

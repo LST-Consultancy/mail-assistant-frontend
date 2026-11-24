@@ -48,6 +48,14 @@ export const FIXTURE_MESSAGES: GraphMessage[] = [
     { importance: "high" }
   ),
   msg(
+    "m8",
+    "c8",
+    who("Contoso Bank", "alerts@bank.example"),
+    "Your one-time password",
+    "Your OTP is 482913. It expires in 10 minutes. Do not share it with anyone.",
+    daysAgo(0, 7)
+  ),
+  msg(
     "m2",
     "c2",
     who("IT Notifications", "noreply@contoso.com"),
@@ -98,11 +106,28 @@ export const FIXTURE_MESSAGES: GraphMessage[] = [
   ),
 ];
 
-/** Sent items: the user already answered Dana (c6), so that thread drops out of the digest. */
+/**
+ * Sent items: the user already answered Dana (c6), so that thread drops out of the inbox digest.
+ * s2 (c7) is still unanswered, so it shows up as a follow-up.
+ */
 export const FIXTURE_SENT: GraphMessage[] = [
   {
-    ...msg("s1", "c6", ME, "Re: Can you review my PR?", "Done, approved.", daysAgo(11)),
+    ...msg("s1", "c6", ME, "Re: Can you review my PR?", "Done, approved.", daysAgo(11), {
+      toRecipients: [who("Dana Ruiz", "dana@contoso.com")],
+    }),
     sentDateTime: daysAgo(11),
+  },
+  {
+    ...msg(
+      "s2",
+      "c7",
+      ME,
+      "Contract renewal: pricing for 2027?",
+      "Hi Eve,\n\nCould you send the 2027 pricing for the support contract? We need it before our budget review on the 28th.\n\nThanks,\nSam",
+      daysAgo(4),
+      { toRecipients: [who("Eve Stone", "eve@northwind.example")], isRead: true }
+    ),
+    sentDateTime: daysAgo(4),
   },
 ];
 

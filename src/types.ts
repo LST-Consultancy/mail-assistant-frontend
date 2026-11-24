@@ -25,6 +25,7 @@ export const CATEGORIES = [
   "newsletter_or_promo",
   "notification",
   "personal",
+  "spam",
   "other",
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -72,10 +73,17 @@ export interface GraphMessage {
   isRead?: boolean;
   importance?: string;
   webLink?: string;
+  categories?: string[];
+  /** Set by Graph on derived types, e.g. "#microsoft.graph.eventMessageRequest" for meeting items. */
+  "@odata.type"?: string;
 }
 
-/** One digest row: the latest incoming message of a conversation plus thread context. */
+/**
+ * One digest row. kind "inbox": keyed on the latest incoming message of a conversation.
+ * kind "sent": keyed on the user's latest sent message that nobody has answered yet.
+ */
 export interface DigestThread {
+  kind: "inbox" | "sent";
   conversationId: string;
   latest: GraphMessage;
   email: Email;

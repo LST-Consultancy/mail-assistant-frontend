@@ -97,8 +97,17 @@ export async function streamCompose(
 
 export type BatchResult = DigestResult | { id: string; error: string };
 
-export const analyzeBatch = (threads: Email[], s: Settings, signal?: AbortSignal) =>
-  postJson<BatchResult[]>("/digest/analyze-batch", { threads, settings: aiSettings(s) }, signal);
+export const analyzeBatch = (
+  threads: Email[],
+  s: Settings,
+  signal?: AbortSignal,
+  mode: "inbox" | "followup" = "inbox"
+) =>
+  postJson<BatchResult[]>(
+    "/digest/analyze-batch",
+    { threads, settings: aiSettings(s), mode },
+    signal
+  );
 
 export const digestOverview = (
   items: {
@@ -108,6 +117,7 @@ export const digestOverview = (
     priority: string;
     category: string;
     needsReply: boolean;
+    followUp?: boolean;
   }[],
   signal?: AbortSignal
 ) => postJson<{ markdown: string }>("/digest/overview", { items }, signal);
