@@ -33,6 +33,7 @@ export function App() {
   return (
     <main className={s.root}>
       <div className={s.header}>
+        <img src="assets/icon-64.png" alt="LST Consultancy" width={28} height={28} />
         <TabList className={s.tabs} selectedValue={tab} onTabSelect={(_, d) => (setTab(d.value as TabId), setShowSettings(false))}>
           {available.map((t) => (
             <Tab key={t} value={t}>
