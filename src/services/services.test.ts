@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { GraphMessage } from "../types";
 import { readSse } from "./api";
+import { env } from "./env";
 import { FIXTURE_MESSAGES, FIXTURE_SENT } from "./fixtures";
 import {
   fetchPaged,
@@ -9,6 +10,8 @@ import {
   groupThreads,
   IGNORED_CATEGORY,
   isNoise,
+  listIgnored,
+  setIgnored,
 } from "./graph";
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -179,6 +182,37 @@ describe("noise, ignore and follow-ups", () => {
       (t) => t.conversationId
     );
     expect(inbox.filter((c) => sent.includes(c))).toEqual([]);
+  });
+});
+
+describe("Ignored tab round trip (mock mailbox)", () => {
+  it("lists ignored conversations grouped, and unignoring brings them back to the digest", async () => {
+    env.mock = true;
+    const byId = (id: string) => [...FIXTURE_MESSAGES, ...FIXTURE_SENT].find((x) => x.id === id)!;
+    try {
+      await setIgnored(byId("m1"), true);
+      await setIgnored(byId("m5"), true); // same conversation as m1
+      await setIgnored(byId("s2"), true);
+      const groups = await listIgnored();
+      expect(groups.map((g) => g.map((x) => x.id))).toEqual([["m1", "m5"], ["s2"]]);
+      expect(
+        groupThreads(FIXTURE_MESSAGES, "me@contoso.com").some((t) => t.conversationId === "c1")
+      ).toBe(false);
+
+      for (const g of groups) for (const x of g) await setIgnored(x, false);
+      expect(await listIgnored()).toEqual([]);
+      expect(
+        groupThreads(FIXTURE_MESSAGES, "me@contoso.com").some((t) => t.conversationId === "c1")
+      ).toBe(true);
+      expect(
+        followUpThreads(FIXTURE_SENT, FIXTURE_MESSAGES, "me@contoso.com").some(
+          (t) => t.conversationId === "c7"
+        )
+      ).toBe(true);
+    } finally {
+      env.mock = false;
+      for (const x of [...FIXTURE_MESSAGES, ...FIXTURE_SENT]) delete x.categories;
+    }
   });
 });
 

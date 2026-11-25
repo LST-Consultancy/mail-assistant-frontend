@@ -168,6 +168,27 @@ export function toEmail(
   };
 }
 
+/** Every message tagged as ignored, newest first, grouped one array per conversation. */
+export async function listIgnored(max = 500): Promise<GraphMessage[][]> {
+  let msgs: GraphMessage[];
+  if (env.mock) msgs = [...FIXTURE_MESSAGES, ...FIXTURE_SENT].filter(isIgnored);
+  else {
+    const filter = encodeURIComponent(`categories/any(c:c eq '${IGNORED_CATEGORY}')`);
+    const select =
+      "id,subject,from,toRecipients,receivedDateTime,sentDateTime,conversationId,categories,webLink";
+    // No $orderby: combined with a lambda $filter it can fail with InefficientFilter; sorted below.
+    msgs = await fetchPaged<GraphMessage>(
+      `/me/messages?$filter=${filter}&$select=${select}&$top=50`,
+      max,
+      {}
+    );
+  }
+  const groups = new Map<string, GraphMessage[]>();
+  for (const m of msgs.sort((a, b) => sentAt(b).localeCompare(sentAt(a))))
+    groups.set(m.conversationId, [...(groups.get(m.conversationId) ?? []), m]);
+  return [...groups.values()];
+}
+
 const isIgnored = (m: GraphMessage) => !!m.categories?.includes(IGNORED_CATEGORY);
 const ignoredConversations = (msgs: GraphMessage[]) =>
   new Set(msgs.filter(isIgnored).map((m) => m.conversationId));
